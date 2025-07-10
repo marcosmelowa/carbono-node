@@ -13,7 +13,14 @@ const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
 
 const app = express();
-app.use(cors());
+
+// === INCLUSÃO DE CORS RESTRITO AO DOMÍNIO DO SITE ===
+app.use(cors({
+  origin: 'https://aplicacoes.tec.br',
+  methods: ['POST'],
+  allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
 app.post("/calculate", async (req, res) => {

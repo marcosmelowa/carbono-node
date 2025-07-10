@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calculadora de Carbono Digital</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anta&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="form-container">
+    <form id="carbonForm">
+      <h2 class="form-title">Preencha o formulário abaixo</h2>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="nome">Nome:</label>
+          <input type="text" name="nome" id="nome" required>
+        </div>
+        <div class="form-group">
+          <label for="celular">Celular:</label>
+          <input type="text" name="celular" id="celular" required>
+        </div>
+        <div class="form-group">
+          <label for="email">E-mail:</label>
+          <input type="email" name="email" id="email" required>
+        </div>
+        <div class="form-group">
+          <label for="url">URL:</label>
+          <input type="text" name="url" id="url" required>
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn">Calcular 🌱</button>
+    </form>
+
+    <section id="result" class="hidden">
+      <div id="progressWrapper" class="progress-wrapper">
+        <div id="progressBar" class="progress-bar"></div>
+        <div id="progressText" class="progress-text">Calculando... 0%</div>
+      </div>
+
+      <div id="carbonResult" class="result-block hidden"></div>
+      <div id="rating" class="rating-block hidden"></div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

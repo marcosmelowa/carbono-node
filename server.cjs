@@ -62,17 +62,22 @@ app.post("/calculate", async (req, res) => {
     }
 
     // === 3. Analisar recursos da página ===
-    // AQUI ESTÁ A MUDANÇA: Simplificamos o puppeteer.launch
+    // ✅ AQUI ESTÁ A MUDANÇA FINAL E MAIS IMPORTANTE
+    const browserFetcher = puppeteer.createBrowserFetcher();
+    const revisionInfo = await browserFetcher.download(puppeteer.defaultRevision);
+    
     browser = await puppeteer.launch({
+      executablePath: revisionInfo.executablePath, // Força o uso do binário baixado
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-gpu',
         '--disable-dev-shm-usage',
-        '--single-process' // Adicionado para ambientes restritos
+        '--single-process'
       ]
     });
+    
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 }); // Adicionado timeout de 60s
 

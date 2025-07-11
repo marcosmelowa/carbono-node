@@ -8,6 +8,7 @@
 require("dotenv").config();
 const express = require("express");
 const puppeteer = require("puppeteer");
+const chromium = require("chromium"); // ✅ NOVO
 const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
@@ -62,6 +63,7 @@ app.post("/calculate", async (req, res) => {
     // === 3. Analisar recursos da página ===
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath: chromium.path, // ✅ USANDO CHROMIUM INSTALADO
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -85,7 +87,7 @@ app.post("/calculate", async (req, res) => {
     const pageWeightBytes = resources.reduce((sum, r) => sum + (r.decodedBodySize || 0), 0);
     const pageWeightMB = pageWeightBytes / (1024 * 1024);
 
-    // === 4. Penalidades (já com redução de 86,31%) ===
+    // === 4. Penalidades (com ajuste de 86,31%) ===
     const externalScripts = resources.filter(r => r.initiatorType === 'script' && !r.name.includes(hostname));
     const heavyDomains = resources.filter(r => /googleapis|gstatic|doubleclick|youtube|vimeo/.test(r.name));
 
@@ -93,13 +95,13 @@ app.post("/calculate", async (req, res) => {
     const penaltyCDN = heavyDomains.length * 0.001369;
     const totalPenalty = penaltyExternal + penaltyCDN;
 
-    // === 5. Conexão e energia renderizada (com ajuste 86,31%) ===
-    const mediaConexao = 0.240544; // gCO2/MB
+    // === 5. Conexão e energia renderizada ===
+    const mediaConexao = 0.240544;
     const energiaRenderKWh = pageWeightMB * 0.000004107;
 
     const gridIntensity = 494;
 
-    // === 6. Emissões operacionais e embutidas com fatores reduzidos ===
+    // === 6. Emissões operacionais e embutidas ===
     const eiDC = 0.007530 / 1024;
     const eiN = 0.008079 / 1024;
     const eiUD = 0.010953 / 1024;
@@ -122,7 +124,7 @@ app.post("/calculate", async (req, res) => {
       (energiaRenderKWh * gridIntensity) +
       totalPenalty;
 
-    // === 7. Classificação (sem alterações) ===
+    // === 7. Classificação ===
     const rating = (() => {
       if (emissionPerVisit < 0.095) return "A+";
       else if (emissionPerVisit < 0.186) return "A";
@@ -137,7 +139,7 @@ app.post("/calculate", async (req, res) => {
 
     await browser.close();
 
-    // === 8. Enviar e-mail com os dados ===
+    // === 8. Envio do e-mail ===
     try {
       const transporter = nodemailer.createTransport({
         host: "smtp.hostinger.com",
@@ -179,7 +181,7 @@ app.post("/calculate", async (req, res) => {
       console.error("Erro ao enviar e-mail:", mailErr.message);
     }
 
-    // === 9. Enviar resposta ao navegador ===
+    // === 9. Enviar resposta JSON ===
     res.json({
       emissao: emissionPerVisit,
       energia: energiaEstimativaKWh,

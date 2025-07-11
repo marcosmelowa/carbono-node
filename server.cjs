@@ -8,6 +8,7 @@
 require("dotenv").config();
 const express = require("express");
 const puppeteer = require("puppeteer");
+const { install } = require('@puppeteer/browsers'); // ✅ MUDANÇA 1: Ferramenta nova importada
 const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
@@ -29,6 +30,16 @@ app.post("/calculate", async (req, res) => {
   let browser; // Definir o browser fora do try para que possamos fechá-lo no finally
 
   try {
+    // ✅ MUDANÇA 2: Garante que o navegador está instalado antes de tudo
+    console.log('Verificando e instalando o navegador Chromium...');
+    const installedBrowser = await install({
+        browser: 'chrome',
+        buildId: '126.0.6478.126', // Uma versão estável conhecida
+        cacheDir: '.cache/puppeteer'
+    });
+    console.log('Navegador instalado em:', installedBrowser.executablePath);
+    
+    // === Início da sua lógica original (INTACTA) ===
     const hostname = new URL(url).hostname;
 
     // === 1. Verificar hospedagem verde ===
@@ -62,24 +73,18 @@ app.post("/calculate", async (req, res) => {
     }
 
     // === 3. Analisar recursos da página ===
-    // ✅ AQUI ESTÁ A MUDANÇA FINAL E MAIS IMPORTANTE
-    const browserFetcher = puppeteer.createBrowserFetcher();
-    const revisionInfo = await browserFetcher.download(puppeteer.defaultRevision);
-    
+    // ✅ MUDANÇA 3: Usa o caminho exato do navegador que acabamos de instalar
     browser = await puppeteer.launch({
-      executablePath: revisionInfo.executablePath, // Força o uso do binário baixado
+      executablePath: installedBrowser.executablePath,
       headless: true,
       args: [
         '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--single-process'
+        '--disable-setuid-sandbox'
       ]
     });
     
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 }); // Adicionado timeout de 60s
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
 
     const resources = await page.evaluate(() => {
       return performance.getEntriesByType("resource").map(r => ({
@@ -156,6 +161,7 @@ app.post("/calculate", async (req, res) => {
         }
       });
 
+      // SEU HTML DO E-MAIL ESTÁ AQUI, COMPLETO E INTACTO
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: process.env.EMAIL_USER,
@@ -187,6 +193,7 @@ app.post("/calculate", async (req, res) => {
     }
 
     // === 9. Enviar resposta JSON ===
+    // SUA RESPOSTA JSON ESTÁ AQUI, COMPLETA E INTACTA
     res.json({
       emissao: emissionPerVisit,
       energia: energiaEstimativaKWh,

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "server.cjs",
   "dependencies": {
+    "@puppeteer/browsers": "^2.1.0",
     "cors": "^2.8.5",
     "dns": "^0.2.2",
     "dotenv": "^17.1.0",
@@ -11,7 +12,6 @@
     "puppeteer": "^24.12.1"
   },
   "scripts": {
-    "start": "node server.cjs",
-    "postinstall": "puppeteer install"
+    "start": "node server.cjs"
   }
 }

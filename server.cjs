@@ -7,7 +7,7 @@
 
 require("dotenv").config();
 const express = require("express");
-const puppeteer = require("puppeteer"); // ✅ AQUI ESTÁ A MUDANÇA: REMOVIDO O 'chromium'
+const puppeteer = require("puppeteer");
 const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
@@ -25,6 +25,8 @@ app.use(express.json());
 
 app.post("/calculate", async (req, res) => {
   const { url, nome, celular, email } = req.body;
+
+  let browser; // Definir o browser fora do try para que possamos fechá-lo no finally
 
   try {
     const hostname = new URL(url).hostname;
@@ -60,18 +62,19 @@ app.post("/calculate", async (req, res) => {
     }
 
     // === 3. Analisar recursos da página ===
-    const browser = await puppeteer.launch({
+    // AQUI ESTÁ A MUDANÇA: Simplificamos o puppeteer.launch
+    browser = await puppeteer.launch({
       headless: true,
-      executablePath: puppeteer.executablePath(), // ✅ AQUI ESTÁ A OUTRA MUDANÇA
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-gpu',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--single-process' // Adicionado para ambientes restritos
       ]
     });
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 }); // Adicionado timeout de 60s
 
     const resources = await page.evaluate(() => {
       return performance.getEntriesByType("resource").map(r => ({
@@ -135,8 +138,6 @@ app.post("/calculate", async (req, res) => {
     })();
 
     const energiaEstimativaKWh = pageWeightMB * (eiDC + eiN + eiUD);
-
-    await browser.close();
 
     // === 8. Envio do e-mail ===
     try {
@@ -202,9 +203,15 @@ app.post("/calculate", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Erro:", error.message);
-    res.status(500).json({ error: "Falha ao calcular emissões ou consultar APIs." });
+    console.error("Erro no /calculate:", error.message);
+    res.status(500).json({ error: "Falha ao calcular emissões. O site pode estar indisponível ou ser muito complexo." });
+  } finally {
+    // Garante que o navegador seja sempre fechado, mesmo se ocorrer um erro
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
-app.listen(3000, () => console.log("✅ Servidor rodando em http://localhost:3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Servidor rodando na porta ${PORT}`));

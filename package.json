@@ -1,10 +1,10 @@
 {
   "name": "calculadora-carbono",
   "version": "1.0.0",
-  "main": "server.js",
-  "type": "module",
+  "main": "server.cjs",
+
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.cjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

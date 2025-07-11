@@ -1,5 +1,10 @@
 // .puppeteerrc.cjs
+const { join } = require('path');
+
+/**
+ * @type {import("puppeteer").Configuration}
+ */
 module.exports = {
-  // Caminho onde o Chromium será armazenado no Render
-  cacheDirectory: '/opt/render/.cache/puppeteer',
+  // Changes the cache location for Puppeteer.
+  cacheDirectory: join(__dirname, '.cache', 'puppeteer'),
 };

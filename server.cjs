@@ -1,4 +1,4 @@
-// server.js
+// server.cjs
 
 // === MODELO DE CÁLCULO ===
 // Versão: v4 (com redução de 86,31% validada por comparação com WCC)
@@ -60,7 +60,15 @@ app.post("/calculate", async (req, res) => {
     }
 
     // === 3. Analisar recursos da página ===
-    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--disable-dev-shm-usage'
+      ]
+    });
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 

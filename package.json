@@ -6,7 +6,6 @@
     "start": "node server.cjs"
   },
   "dependencies": {
-    "chromium": "^3.0.3",
     "cors": "^2.8.5",
     "dns": "^0.2.2",
     "dotenv": "^17.1.0",
@@ -14,4 +13,8 @@
     "nodemailer": "^7.0.5",
     "puppeteer": "^24.12.1"
   }
+  "scripts": {
+  "start": "node server.cjs",
+  "postinstall": "puppeteer install"
+}
 }

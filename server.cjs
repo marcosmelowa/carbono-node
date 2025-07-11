@@ -7,8 +7,7 @@
 
 require("dotenv").config();
 const express = require("express");
-const puppeteer = require("puppeteer");
-const chromium = require("chromium"); // ✅ NOVO
+const puppeteer = require("puppeteer"); // ✅ AQUI ESTÁ A MUDANÇA: REMOVIDO O 'chromium'
 const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
@@ -63,7 +62,7 @@ app.post("/calculate", async (req, res) => {
     // === 3. Analisar recursos da página ===
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: chromium.path, // ✅ USANDO CHROMIUM INSTALADO
+      executablePath: puppeteer.executablePath(), // ✅ AQUI ESTÁ A OUTRA MUDANÇA
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

@@ -15,8 +15,8 @@ const nodemailer = require("nodemailer");
 
 const app = express();
 
-// ✅ NOVA FUNÇÃO AUXILIAR: Fetch com limite de tempo maior
-async function fetchWithTimeout(url, timeout = 30000) { // 30 segundos de timeout
+// ✅ MUDANÇA: Aumentando o tempo limite padrão para 90 segundos
+async function fetchWithTimeout(url, timeout = 90000) { // 90 segundos de timeout
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
     try {
@@ -48,7 +48,6 @@ app.post("/calculate", async (req, res) => {
   let browser; // Definir o browser fora do try para que possamos fechá-lo no finally
 
   try {
-    // ✅ MUDANÇA: Garante que o navegador está instalado antes de tudo
     console.log('Verificando e instalando o navegador Chromium...');
     const installedBrowser = await install({
         browser: 'chrome',
@@ -57,10 +56,8 @@ app.post("/calculate", async (req, res) => {
     });
     console.log('Navegador pronto para uso em:', installedBrowser.executablePath);
     
-    // === Início da sua lógica original (INTACTA) ===
     const hostname = new URL(url).hostname;
 
-    // === 1. Verificar hospedagem verde (AGORA COM TIMEOUT) ===
     console.log(`Verificando Green Web para: ${hostname}`);
     const greenCheckRes = await fetchWithTimeout(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
     const greenCheckData = await greenCheckRes.json();
@@ -71,7 +68,6 @@ app.post("/calculate", async (req, res) => {
     const hostedByURL = greenCheckData.hostedbywebsite || "";
     const greenFactor = isGreen ? 0.20 : 1.0;
 
-    // === 2. IP e localização do servidor ===
     let ipAddress = "";
     try {
       const addresses = await dns.lookup(hostname);
@@ -87,7 +83,7 @@ app.post("/calculate", async (req, res) => {
     if (ipAddress) {
       try {
         console.log(`Verificando IP-API para: ${ipAddress}`);
-        const ipApiRes = await fetchWithTimeout(`http://ip-api.com/json/${ipAddress}`); // AGORA COM TIMEOUT
+        const ipApiRes = await fetchWithTimeout(`http://ip-api.com/json/${ipAddress}`);
         const ipData = await ipApiRes.json();
         cidadeServidor = ipData.city || "Indefinido";
         paisServidor = ipData.countryCode || "Indefinido";
@@ -98,7 +94,6 @@ app.post("/calculate", async (req, res) => {
       }
     }
 
-    // === 3. Analisar recursos da página ===
     console.log('Iniciando Puppeteer...');
     browser = await puppeteer.launch({
       executablePath: installedBrowser.executablePath,
@@ -125,7 +120,6 @@ app.post("/calculate", async (req, res) => {
     });
     console.log(`Recursos coletados: ${resources.length} itens. Iniciando cálculos...`);
 
-    // === (TODA A SUA LÓGICA DE CÁLCULO ESTÁ 100% INTACTA ABAIXO) ===
     const pageWeightBytes = resources.reduce((sum, r) => sum + (r.decodedBodySize || 0), 0);
     const pageWeightMB = pageWeightBytes / (1024 * 1024);
 
@@ -175,7 +169,6 @@ app.post("/calculate", async (req, res) => {
 
     const energiaEstimativaKWh = pageWeightMB * (eiDC + eiN + eiUD);
     
-    // === 8. Envio do e-mail ===
     console.log('Cálculos finalizados. Preparando para enviar e-mail...');
     try {
       const transporter = nodemailer.createTransport({
@@ -219,7 +212,6 @@ app.post("/calculate", async (req, res) => {
       console.error("Erro ao enviar e-mail:", mailErr.message);
     }
 
-    // === 9. Enviar resposta JSON ===
     console.log('Enviando resposta para o cliente...');
     res.json({
       emissao: emissionPerVisit,

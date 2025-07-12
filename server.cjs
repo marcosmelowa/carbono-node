@@ -8,12 +8,30 @@
 require("dotenv").config();
 const express = require("express");
 const puppeteer = require("puppeteer");
-const { install } = require('@puppeteer/browsers'); // ✅ MUDANÇA 1: Ferramenta nova importada
+const { install } = require('@puppeteer/browsers');
 const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
 
 const app = express();
+
+// ✅ NOVA FUNÇÃO AUXILIAR: Fetch com limite de tempo maior
+async function fetchWithTimeout(url, timeout = 30000) { // 30 segundos de timeout
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        // Se o erro for de Abort, lança uma mensagem mais clara
+        if (error.name === 'AbortError') {
+            throw new Error(`A requisição para ${url} demorou mais de ${timeout / 1000} segundos.`);
+        }
+        throw error;
+    }
+}
 
 // === INCLUSÃO DE CORS RESTRITO AO DOMÍNIO DO SITE ===
 app.use(cors({
@@ -30,21 +48,23 @@ app.post("/calculate", async (req, res) => {
   let browser; // Definir o browser fora do try para que possamos fechá-lo no finally
 
   try {
-    // ✅ MUDANÇA 2: Garante que o navegador está instalado antes de tudo
+    // ✅ MUDANÇA: Garante que o navegador está instalado antes de tudo
     console.log('Verificando e instalando o navegador Chromium...');
     const installedBrowser = await install({
         browser: 'chrome',
         buildId: '126.0.6478.126', // Uma versão estável conhecida
         cacheDir: '.cache/puppeteer'
     });
-    console.log('Navegador instalado em:', installedBrowser.executablePath);
+    console.log('Navegador pronto para uso em:', installedBrowser.executablePath);
     
     // === Início da sua lógica original (INTACTA) ===
     const hostname = new URL(url).hostname;
 
-    // === 1. Verificar hospedagem verde ===
-    const greenCheckRes = await fetch(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
+    // === 1. Verificar hospedagem verde (AGORA COM TIMEOUT) ===
+    console.log(`Verificando Green Web para: ${hostname}`);
+    const greenCheckRes = await fetchWithTimeout(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
     const greenCheckData = await greenCheckRes.json();
+    console.log('Verificação Green Web concluída.');
 
     const isGreen = greenCheckData.green || false;
     const hostedBy = greenCheckData.hostedby || "Desconhecido";
@@ -56,7 +76,9 @@ app.post("/calculate", async (req, res) => {
     try {
       const addresses = await dns.lookup(hostname);
       ipAddress = addresses.address;
-    } catch {}
+    } catch (e){
+      console.log('Não foi possível obter o endereço de IP via DNS.');
+    }
 
     let cidadeServidor = "Indefinido";
     let paisServidor = "Indefinido";
@@ -64,16 +86,20 @@ app.post("/calculate", async (req, res) => {
 
     if (ipAddress) {
       try {
-        const ipApiRes = await fetch(`http://ip-api.com/json/${ipAddress}`);
+        console.log(`Verificando IP-API para: ${ipAddress}`);
+        const ipApiRes = await fetchWithTimeout(`http://ip-api.com/json/${ipAddress}`); // AGORA COM TIMEOUT
         const ipData = await ipApiRes.json();
         cidadeServidor = ipData.city || "Indefinido";
         paisServidor = ipData.countryCode || "Indefinido";
         orgServidor = ipData.org || "Desconhecido";
-      } catch {}
+        console.log('Verificação IP-API concluída.');
+      } catch (e){
+        console.log('Falha ao consultar a API de IP:', e.message);
+      }
     }
 
     // === 3. Analisar recursos da página ===
-    // ✅ MUDANÇA 3: Usa o caminho exato do navegador que acabamos de instalar
+    console.log('Iniciando Puppeteer...');
     browser = await puppeteer.launch({
       executablePath: installedBrowser.executablePath,
       headless: true,
@@ -84,7 +110,9 @@ app.post("/calculate", async (req, res) => {
     });
     
     const page = await browser.newPage();
+    console.log(`Navegando para: ${url}`);
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    console.log('Página carregada. Coletando recursos...');
 
     const resources = await page.evaluate(() => {
       return performance.getEntriesByType("resource").map(r => ({
@@ -95,11 +123,12 @@ app.post("/calculate", async (req, res) => {
         initiatorType: r.initiatorType
       }));
     });
+    console.log(`Recursos coletados: ${resources.length} itens. Iniciando cálculos...`);
 
+    // === (TODA A SUA LÓGICA DE CÁLCULO ESTÁ 100% INTACTA ABAIXO) ===
     const pageWeightBytes = resources.reduce((sum, r) => sum + (r.decodedBodySize || 0), 0);
     const pageWeightMB = pageWeightBytes / (1024 * 1024);
 
-    // === 4. Penalidades (com ajuste de 86,31%) ===
     const externalScripts = resources.filter(r => r.initiatorType === 'script' && !r.name.includes(hostname));
     const heavyDomains = resources.filter(r => /googleapis|gstatic|doubleclick|youtube|vimeo/.test(r.name));
 
@@ -107,13 +136,11 @@ app.post("/calculate", async (req, res) => {
     const penaltyCDN = heavyDomains.length * 0.001369;
     const totalPenalty = penaltyExternal + penaltyCDN;
 
-    // === 5. Conexão e energia renderizada ===
     const mediaConexao = 0.240544;
     const energiaRenderKWh = pageWeightMB * 0.000004107;
 
     const gridIntensity = 494;
 
-    // === 6. Emissões operacionais e embutidas ===
     const eiDC = 0.007530 / 1024;
     const eiN = 0.008079 / 1024;
     const eiUD = 0.010953 / 1024;
@@ -136,7 +163,6 @@ app.post("/calculate", async (req, res) => {
       (energiaRenderKWh * gridIntensity) +
       totalPenalty;
 
-    // === 7. Classificação ===
     const rating = (() => {
       if (emissionPerVisit < 0.095) return "A+";
       else if (emissionPerVisit < 0.186) return "A";
@@ -148,8 +174,9 @@ app.post("/calculate", async (req, res) => {
     })();
 
     const energiaEstimativaKWh = pageWeightMB * (eiDC + eiN + eiUD);
-
+    
     // === 8. Envio do e-mail ===
+    console.log('Cálculos finalizados. Preparando para enviar e-mail...');
     try {
       const transporter = nodemailer.createTransport({
         host: "smtp.hostinger.com",
@@ -160,8 +187,7 @@ app.post("/calculate", async (req, res) => {
           pass: process.env.EMAIL_PASS
         }
       });
-
-      // SEU HTML DO E-MAIL ESTÁ AQUI, COMPLETO E INTACTO
+      
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: process.env.EMAIL_USER,
@@ -188,12 +214,13 @@ app.post("/calculate", async (req, res) => {
           <p><strong>♻️ Hospedagem verde:</strong> ${isGreen ? "✅ Sim" : "❌ Não"} – ${hostedBy} (${hostedByURL})</p>
         `
       });
+      console.log('E-mail enviado com sucesso.');
     } catch (mailErr) {
       console.error("Erro ao enviar e-mail:", mailErr.message);
     }
 
     // === 9. Enviar resposta JSON ===
-    // SUA RESPOSTA JSON ESTÁ AQUI, COMPLETA E INTACTA
+    console.log('Enviando resposta para o cliente...');
     res.json({
       emissao: emissionPerVisit,
       energia: energiaEstimativaKWh,
@@ -218,9 +245,9 @@ app.post("/calculate", async (req, res) => {
     console.error("Erro no /calculate:", error.message);
     res.status(500).json({ error: "Falha ao calcular emissões. O site pode estar indisponível ou ser muito complexo." });
   } finally {
-    // Garante que o navegador seja sempre fechado, mesmo se ocorrer um erro
     if (browser) {
       await browser.close();
+      console.log('Processo finalizado. Navegador fechado.');
     }
   }
 });

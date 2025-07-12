@@ -13,6 +13,10 @@ const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
 
+// Novas importações para geração de imagem
+const path = require('path');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+
 const app = express();
 
 // ✅ MUDANÇA: Aumentando o tempo limite padrão para 90 segundos
@@ -242,6 +246,55 @@ app.post("/calculate", async (req, res) => {
       console.log('Processo finalizado. Navegador fechado.');
     }
   }
+});
+
+// NOVA ROTA PARA GERAR O SELO
+app.get('/generate-badge', async (req, res) => {
+    try {
+        const { domain, comparison } = req.query;
+
+        // Validação simples dos parâmetros
+        if (!domain || !comparison) {
+            return res.status(400).send('Parâmetros "domain" e "comparison" são obrigatórios.');
+        }
+
+        // Caminho para a pasta de assets
+        const assetsPath = path.join(__dirname, 'assets');
+        
+        // Registrar a fonte 'Anta'
+        // NOTA: Precisaremos adicionar o arquivo da fonte 'Anta-Regular.ttf' na pasta 'assets'
+        registerFont(path.join(assetsPath, 'Anta-Regular.ttf'), { family: 'Anta' });
+        
+        // Carregar o template do selo
+        const templatePath = path.join(assetsPath, 'badge-template.png');
+        const image = await loadImage(templatePath);
+
+        // Criar o canvas com as dimensões do template
+        const canvas = createCanvas(image.width, image.height);
+        const ctx = canvas.getContext('2d');
+
+        // 1. Desenhar a imagem do template como fundo
+        ctx.drawImage(image, 0, 0, image.width, image.height);
+
+        // 2. Configurar e desenhar o texto do domínio
+        ctx.fillStyle = '#E0E0E0'; // Cor cinza claro para o domínio
+        ctx.font = '10px "Anta"';
+        ctx.textAlign = 'left';
+        ctx.fillText(domain, 12, 43); // Posição (x, y) ajustada para o seu layout
+
+        // 3. Configurar e desenhar o texto de comparação
+        ctx.fillStyle = '#B0B0B0'; // Cor cinza um pouco mais escura
+        ctx.font = '8px "Anta"';
+        ctx.fillText(comparison, 12, 57); // Posição (x, y) ajustada
+
+        // Finalizar e enviar a imagem
+        res.setHeader('Content-Type', 'image/png');
+        canvas.createPNGStream().pipe(res);
+
+    } catch (error) {
+        console.error('Erro ao gerar o selo:', error);
+        res.status(500).send('Erro ao gerar a imagem do selo.');
+    }
 });
 
 const PORT = process.env.PORT || 3000;

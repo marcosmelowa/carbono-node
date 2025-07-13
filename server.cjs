@@ -285,7 +285,7 @@ app.get('/generate-badge', async (req, res) => {
         // 3. Configurar e desenhar o texto de comparação
         ctx.fillStyle = '#B0B0B0'; // Cor cinza um pouco mais escura
         ctx.font = '7.5px "Anta"';
-        ctx.fillText(comparison, 12, 58); // Posição (x, y) ajustada
+        ctx.fillText(comparison, 12, 55); // Posição (x, y) ajustada
 
         // Finalizar e enviar a imagem
         res.setHeader('Content-Type', 'image/png');

@@ -214,18 +214,13 @@ app.post("/calculate", async (req, res) => {
     const emUD = pageWeightMB * emEnergyIntensityUD * gridIntensityGlobal;
     const embodiedEmissions = emDC + emN + emUD;
     
-    // 4. Emissão total antes do ajuste de cache
-    const initialEmissionPerVisit = operationalEmissions + embodiedEmissions;
+        // 4. Emissão total por visita (considerando 100% de novos visitantes, sem ajuste de cache)
+    const emissionPerVisit = operationalEmissions + embodiedEmissions;
 
-    // 5. Aplicar Fator de Ajuste de Cache/Visitantes Recorrentes (padrão 0.75)
-    // Fator baseado em 50% de visitantes recorrentes com 50% de taxa de cache (0.5 + 0.5 * (1 - 0.5))
-    const cacheAdjustmentFactor = 0.75;
-    const emissionPerVisit = initialEmissionPerVisit * cacheAdjustmentFactor;
-
-    // Estimativa de energia por visita
+    // Estimativa de energia por visita (sem ajuste de cache)
     const totalEnergyIntensity = opEnergyIntensityDC + opEnergyIntensityN + opEnergyIntensityUD + emEnergyIntensityDC + emEnergyIntensityN + emEnergyIntensityUD;
-    const energiaEstimativaKWh = pageWeightMB * totalEnergyIntensity * cacheAdjustmentFactor;
-
+    const energiaEstimativaKWh = pageWeightMB * totalEnergyIntensity;
+    
     // --- FIM DA LÓGICA DE CÁLCULO ---
 
     const rating = (() => {

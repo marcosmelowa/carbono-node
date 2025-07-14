@@ -174,9 +174,14 @@ app.post("/calculate", async (req, res) => {
 
     // --- INÍCIO DA LÓGICA DE CÁLCULO SWDM v4 REGIONAL ---
 
-    // 1. Obter intensidade de carbono com base na localização
+        // 1. Definir a intensidade de carbono global para todos os segmentos
+    const gridIntensityGlobal = getCarbonIntensityByCountryCode('WORLD');
+    const gridIntensityServer = gridIntensityGlobal; // Usa a média global
+    const gridIntensityUser = gridIntensityGlobal;   // Usa a média global
+
+    // Manter a informação do país do servidor e do usuário apenas para fins de log e e-mail
     const userIp = req.ip;
-    let userCountryCode = 'GLOBAL'; // Padrão
+    let userCountryCode = 'N/A';
     if (userIp) {
       try {
         const userIpRes = await fetchWithTimeout(`http://ip-api.com/json/${userIp}`);
@@ -185,14 +190,10 @@ app.post("/calculate", async (req, res) => {
           userCountryCode = userIpData.countryCode;
         }
       } catch (e) {
-        console.log('Falha ao obter geolocalização do IP do usuário. Usando padrão global.', e.message);
+        console.log('Falha ao obter geolocalização do IP do usuário.', e.message);
       }
     }
-
-    const gridIntensityGlobal = getCarbonIntensityByCountryCode('WORLD');
-    const gridIntensityServer = getCarbonIntensityByCountryCode(paisServidor);
-    const gridIntensityUser = getCarbonIntensityByCountryCode(userCountryCode);
-
+    
     // 2. Coeficientes de Intensidade Energética (kWh/GB) do SWDM v4, convertidos para kWh/MB
     const opEnergyIntensityDC = 0.055 / 1024;
     const opEnergyIntensityN = 0.059 / 1024;
@@ -220,7 +221,7 @@ app.post("/calculate", async (req, res) => {
     // Estimativa de energia por visita (sem ajuste de cache)
     const totalEnergyIntensity = opEnergyIntensityDC + opEnergyIntensityN + opEnergyIntensityUD + emEnergyIntensityDC + emEnergyIntensityN + emEnergyIntensityUD;
     const energiaEstimativaKWh = pageWeightMB * totalEnergyIntensity;
-    
+
     // --- FIM DA LÓGICA DE CÁLCULO ---
 
     const rating = (() => {

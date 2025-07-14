@@ -20,3 +20,462 @@ cod package.json:
 
 
 
+
+
+server,cjs:
+
+
+
+// server.cjs
+
+// === MODELO DE CÁLCULO ===
+// Versão: v4 (com redução de 86,31% validada por comparação com WCC)
+// Última validação: Marcos Melo - 2025-07
+// NÃO MODIFICAR COEFICIENTES SEM AVALIAÇÃO TÉCNICA!
+
+require("dotenv").config();
+const express = require("express");
+const puppeteer = require("puppeteer");
+const { install } = require('@puppeteer/browsers');
+const cors = require("cors");
+const dns = require("dns").promises;
+const nodemailer = require("nodemailer");
+
+const app = express();
+
+// ✅ MUDANÇA: Aumentando o tempo limite padrão para 90 segundos
+async function fetchWithTimeout(url, timeout = 90000) { // 90 segundos de timeout
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        // Se o erro for de Abort, lança uma mensagem mais clara
+        if (error.name === 'AbortError') {
+            throw new Error(`A requisição para ${url} demorou mais de ${timeout / 1000} segundos.`);
+        }
+        throw error;
+    }
+}
+
+// === INCLUSÃO DE CORS RESTRITO AO DOMÍNIO DO SITE ===
+app.use(cors({
+  origin: 'https://aplicacoes.tec.br',
+  methods: ['POST'],
+  allowedHeaders: ['Content-Type']
+}));
+
+app.use(express.json());
+
+app.post("/calculate", async (req, res) => {
+  const { url, nome, celular, email } = req.body;
+
+  let browser; // Definir o browser fora do try para que possamos fechá-lo no finally
+
+  try {
+    console.log('Verificando e instalando o navegador Chromium...');
+    const installedBrowser = await install({
+        browser: 'chrome',
+        buildId: '126.0.6478.126', // Uma versão estável conhecida
+        cacheDir: '.cache/puppeteer'
+    });
+    console.log('Navegador pronto para uso em:', installedBrowser.executablePath);
+    
+    const hostname = new URL(url).hostname;
+
+    console.log(`Verificando Green Web para: ${hostname}`);
+    const greenCheckRes = await fetchWithTimeout(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
+    const greenCheckData = await greenCheckRes.json();
+    console.log('Verificação Green Web concluída.');
+
+    const isGreen = greenCheckData.green || false;
+    const hostedBy = greenCheckData.hostedby || "Desconhecido";
+    const hostedByURL = greenCheckData.hostedbywebsite || "";
+    const greenFactor = isGreen ? 0.20 : 1.0;
+
+    let ipAddress = "";
+    try {
+      const addresses = await dns.lookup(hostname);
+      ipAddress = addresses.address;
+    } catch (e){
+      console.log('Não foi possível obter o endereço de IP via DNS.');
+    }
+
+    let cidadeServidor = "Indefinido";
+    let paisServidor = "Indefinido";
+    let orgServidor = "Desconhecido";
+
+    if (ipAddress) {
+      try {
+        console.log(`Verificando IP-API para: ${ipAddress}`);
+        const ipApiRes = await fetchWithTimeout(`http://ip-api.com/json/${ipAddress}`);
+        const ipData = await ipApiRes.json();
+        cidadeServidor = ipData.city || "Indefinido";
+        paisServidor = ipData.countryCode || "Indefinido";
+        orgServidor = ipData.org || "Desconhecido";
+        console.log('Verificação IP-API concluída.');
+      } catch (e){
+        console.log('Falha ao consultar a API de IP:', e.message);
+      }
+    }
+
+    console.log('Iniciando Puppeteer...');
+    browser = await puppeteer.launch({
+      executablePath: installedBrowser.executablePath,
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox'
+      ]
+    });
+    
+    const page = await browser.newPage();
+    console.log(`Navegando para: ${url}`);
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    console.log('Página carregada. Coletando recursos...');
+
+    const resources = await page.evaluate(() => {
+      return performance.getEntriesByType("resource").map(r => ({
+        name: r.name,
+        transferSize: r.transferSize,
+        encodedBodySize: r.encodedBodySize,
+        decodedBodySize: r.decodedBodySize,
+        initiatorType: r.initiatorType
+      }));
+    });
+    console.log(`Recursos coletados: ${resources.length} itens. Iniciando cálculos...`);
+
+    const pageWeightBytes = resources.reduce((sum, r) => sum + (r.decodedBodySize || 0), 0);
+    const pageWeightMB = pageWeightBytes / (1024 * 1024);
+
+    const externalScripts = resources.filter(r => r.initiatorType === 'script' && !r.name.includes(hostname));
+    const heavyDomains = resources.filter(r => /googleapis|gstatic|doubleclick|youtube|vimeo/.test(r.name));
+
+    const penaltyExternal = externalScripts.length * 0.0006845;
+    const penaltyCDN = heavyDomains.length * 0.001369;
+    const totalPenalty = penaltyExternal + penaltyCDN;
+
+    const mediaConexao = 0.240544;
+    const energiaRenderKWh = pageWeightMB * 0.000004107;
+
+    const gridIntensity = 494;
+
+    const eiDC = 0.007530 / 1024;
+    const eiN = 0.008079 / 1024;
+    const eiUD = 0.010953 / 1024;
+
+    const eiEMDC = 0.001643 / 1024;
+    const eiEMN = 0.001779 / 1024;
+    const eiEMUD = 0.011067 / 1024;
+
+    const opDC = pageWeightMB * eiDC * gridIntensity * greenFactor;
+    const opN = pageWeightMB * eiN * gridIntensity;
+    const opUD = pageWeightMB * eiUD * gridIntensity;
+
+    const emDC = pageWeightMB * eiEMDC * gridIntensity;
+    const emN = pageWeightMB * eiEMN * gridIntensity;
+    const emUD = pageWeightMB * eiEMUD * gridIntensity;
+
+    const emissionPerVisit =
+      (opDC + opN + opUD + emDC + emN + emUD) +
+      (mediaConexao * pageWeightMB) +
+      (energiaRenderKWh * gridIntensity) +
+      totalPenalty;
+
+    const rating = (() => {
+      if (emissionPerVisit < 0.095) return "A+";
+      else if (emissionPerVisit < 0.186) return "A";
+      else if (emissionPerVisit < 0.341) return "B";
+      else if (emissionPerVisit < 0.493) return "C";
+      else if (emissionPerVisit < 0.656) return "D";
+      else if (emissionPerVisit < 0.846) return "E";
+      return "F";
+    })();
+
+    const energiaEstimativaKWh = pageWeightMB * (eiDC + eiN + eiUD);
+    
+    console.log('Cálculos finalizados. Preparando para enviar e-mail...');
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.hostinger.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+      
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: process.env.EMAIL_USER,
+        subject: "Novo lead - Calculadora de Carbono",
+        html: `
+          <h2>📩 Novo lead - Calculadora de Carbono</h2>
+          <p><strong>Nome:</strong> ${nome}</p>
+          <p><strong>Celular:</strong> ${celular}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>URL:</strong> ${url}</p>
+          <hr>
+          <p><strong>🌿 Emissão estimada:</strong> ${emissionPerVisit.toFixed(3)} g CO₂/visita</p>
+          <p><strong>⚡ Energia estimada:</strong> ${energiaEstimativaKWh.toFixed(5)} kWh</p>
+          <p><strong>📊 Classificação:</strong> ${rating}</p>
+          <p><strong>🌲 Equivalente a:</strong> ${(emissionPerVisit / 21000).toFixed(3)} árvores/ano</p>
+          <p><strong>🚗 Ou:</strong> ${(emissionPerVisit / 404).toFixed(2)} km dirigidos</p>
+          <hr>
+          <p><strong>💾 Peso da página:</strong> ${pageWeightMB.toFixed(2)} MB</p>
+          <p><strong>📎 Scripts externos:</strong> ${externalScripts.length}</p>
+          <p><strong>🎯 Domínios pesados:</strong> ${heavyDomains.length}</p>
+          <p><strong>🧮 Penalidade total:</strong> ${totalPenalty.toFixed(3)} g CO₂</p>
+          <p><strong>🛰️ Localização do servidor:</strong> ${cidadeServidor}, ${paisServidor}</p>
+          <p><strong>🏢 Provedor:</strong> ${orgServidor}</p>
+          <p><strong>♻️ Hospedagem verde:</strong> ${isGreen ? "✅ Sim" : "❌ Não"} – ${hostedBy} (${hostedByURL})</p>
+        `
+      });
+      console.log('E-mail enviado com sucesso.');
+    } catch (mailErr) {
+      console.error("Erro ao enviar e-mail:", mailErr.message);
+    }
+
+    console.log('Enviando resposta para o cliente...');
+    res.json({
+      emissao: emissionPerVisit,
+      energia: energiaEstimativaKWh,
+      rating,
+      km: (emissionPerVisit / 404).toFixed(2),
+      arvores: (emissionPerVisit / 21000).toFixed(3),
+      green: isGreen,
+      hostedby: hostedBy,
+      hostedbywebsite: hostedByURL,
+      servidor: {
+        cidade: cidadeServidor,
+        pais: paisServidor,
+        org: orgServidor
+      },
+      externalScripts: externalScripts.length,
+      heavyDomains: heavyDomains.length,
+      totalPenalty: totalPenalty.toFixed(3),
+      pageWeightMB: pageWeightMB.toFixed(2)
+    });
+
+  } catch (error) {
+    console.error("Erro no /calculate:", error.message);
+    res.status(500).json({ error: "Falha ao calcular emissões. O site pode estar indisponível ou ser muito complexo." });
+  } finally {
+    if (browser) {
+      await browser.close();
+      console.log('Processo finalizado. Navegador fechado.');
+    }
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Servidor rodando na porta ${PORT}`));
+
+
+
+
+
+
+
+
+
+
+
+html e cript do wordpress:
+
+<main class="form-container">
+  <!-- Formulário -->
+  <form id="carbonForm">
+    <h2 class="form-title">Preencha o formulário abaixo</h2>
+    <div class="form-grid">
+      <div class="form-group"><label for="nome">Nome:</label><input type="text" id="nome" required></div>
+      <div class="form-group"><label for="celular">Celular:</label><input type="text" id="celular" required></div>
+      <div class="form-group"><label for="email">E-mail:</label><input type="email" id="email" required></div>
+      <div class="form-group"><label for="url">URL do site:</label><input type="text" id="url" required></div>
+    </div>
+    <button type="submit" id="submitBtn">Calcular 🌱</button>
+  </form>
+
+  <!-- Seção de Carregamento Aprimorada -->
+  <section id="loading" class="loading-section hidden">
+    <div class="spinner-container">
+      <div class="spinner-bg"></div>
+      <div class="spinner-progress"></div>
+      <div id="progressText" class="progress-text">0%</div>
+    </div>
+    <p>Calculando a pegada de carbono...</p>
+    <div class="dica-container">
+      <p id="dicaSustentavel"></p>
+      <span id="dicaFonte"></span>
+    </div>
+  </section>
+  
+  <!-- Seção de Resultados V4 (com a correção do marcador) -->
+  <section id="result" class="results-panel hidden">
+    <div class="results-header-v2">
+      <div class="grade-box">
+        <div id="gradeDisplay" class="grade-display">D</div>
+        <p id="comparativo" class="grade-comparison">Mais limpo que 60% dos sites testados.</p>
+      </div>
+      <div class="emission-box">
+        <h3 id="emissao" class="emission-value">0,519g CO₂</h3>
+        <p class="emission-label">por visita</p>
+      </div>
+    </div>
+    <hr class="results-divider">
+    <div class="rating-bar-container">
+      <div id="ratingMarker" class="rating-marker hidden">D</div>
+      <div class="rating-bar">
+        <div class="rating-segment segment-a-plus">A+</div>
+        <div class="rating-segment segment-a">A</div>
+        <div class="rating-segment segment-b">B</div>
+        <div class="rating-segment segment-c">C</div>
+        <div class="rating-segment segment-d">D</div>
+        <div class="rating-segment segment-e">E</div>
+        <div class="rating-segment segment-f">F</div>
+      </div>
+      
+      <!-- ✅ MUDANÇA AQUI: Marcadores separados para Desktop e Mobile -->
+      <div class="global-average-marker desktop-only">Média<br>Global</div>
+      
+    </div>
+    <div class="details-section">
+      <h4>Impacto Anual <small>(estimado para 10.000 visitas/mês)</small></h4>
+      <div class="details-grid-v2">
+        <div class="impact-column">
+          <div class="impact-card-v2"><span class="value" id="co2Anual">62.3 kg</span><span class="label">de CO₂ emitidos</span></div>
+          <div class="impact-card-v2"><span class="value" id="energiaAnual">6.2 kWh</span><span class="label">de energia consumida</span></div>
+        </div>
+        <div class="tech-details-v2">
+          <h4>Diagnóstico Técnico</h4>
+          <p><strong>♻️ Hospedagem Verde:</strong> <span id="hospedagemVerde">Sim</span></p>
+          <p><strong>📦 Peso da Página:</strong> <span id="pesoPagina">2.00 MB</span></p>
+          <p><strong>⚡ Consumo de energia/visita:</strong> <span id="energiaVisita">0.00094kWh</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="methodology-link"><a href="https://sustainablewebdesign.org/estimating-digital-emissions/" target="_blank" rel="noopener noreferrer">🔬 Metodologia baseada em Sustainable Web Design v4.</a></div>
+  </section>
+</main>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("carbonForm");
+    const loadingSection = document.getElementById("loading");
+    const resultSection = document.getElementById("result");
+    const progressText = document.getElementById("progressText");
+
+    const DICAS = [
+        { text: "O setor de TI já consome cerca de 7% da eletricidade global.", source: "Greenpeace" },
+        { text: "A indústria das comunicações poderá usar 20% de toda a eletricidade do mundo até 2025.", source: "Climate Home News" },
+        { text: "O tamanho médio de uma página web é quase 4x maior do que em 2010.", source: "HTTP Archive" },
+        { text: "Imagens otimizadas podem reduzir o peso de uma página em mais de 70%.", source: "Boas práticas de desenvolvimento" },
+        { text: "Um data center típico pode usar até 19 milhões de litros de água por dia.", source: "NBC News" },
+        { text: "Escolher uma hospedagem com energia 100% renovável é um dos maiores impactos positivos que você pode ter.", source: "The Green Web Foundation" }
+    ];
+    let dicaInterval, progressInterval;
+
+    form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const nome = document.getElementById("nome").value;
+        const celular = document.getElementById("celular").value;
+        const email = document.getElementById("email").value;
+        const url = document.getElementById("url").value;
+
+        form.classList.add("hidden");
+        resultSection.classList.add("hidden");
+        loadingSection.classList.remove("hidden");
+        
+        const dicaElement = document.getElementById("dicaSustentavel");
+        const fonteElement = document.getElementById("dicaFonte");
+        let dicaIndex = -1;
+        
+        function proximaDica() {
+            dicaIndex = (dicaIndex + 1) % DICAS.length;
+            dicaElement.innerText = `"${DICAS[dicaIndex].text}"`;
+            fonteElement.innerText = `- ${DICAS[dicaIndex].source}`;
+        }
+        
+        proximaDica();
+        dicaInterval = setInterval(proximaDica, 6000); // Muda a dica a cada 6 segundos
+
+        let progress = 0;
+        progressInterval = setInterval(() => {
+            if (progress < 95) {
+                progress += Math.floor(Math.random() * 2) + 1;
+                progress = Math.min(progress, 95);
+                progressText.innerText = `${progress}%`;
+            }
+        }, 400);
+
+        try {
+            const response = await fetch("https://carbono-api-a9n6.onrender.com/calculate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ nome, celular, email, url })
+            });
+            
+            clearInterval(progressInterval);
+            progressText.innerText = `100%`;
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Erro desconhecido na API.' }));
+                throw new Error(errorData.error || "Erro na resposta da API. Tente uma URL válida.");
+            }
+            
+            const data = await response.json();
+            
+            setTimeout(() => {
+                clearInterval(dicaInterval);
+                
+                const gradeColors = { 'A+': '#03EB7C', 'A': '#51DB88', 'B': '#A4CA47', 'C': '#FDB802', 'D': '#FF9806', 'E': '#FF5A10', 'F': '#FF031F' };
+                const markerPositions = { 'A+': '7%', 'A': '21.5%', 'B': '36%', 'C': '50%', 'D': '64.5%', 'E': '79%', 'F': '93%' };
+                const percentualMap = { 'A+': 95, 'A': 90, 'B': 80, 'C': 70, 'D': 60, 'E': 50, 'F': 40 };
+
+                const grade = data.rating;
+                const cor = gradeColors[grade] || '#FF9806';
+                
+                const gradeDisplay = document.getElementById("gradeDisplay");
+                gradeDisplay.innerText = grade;
+                gradeDisplay.style.borderColor = cor;
+                gradeDisplay.style.color = cor;
+                gradeDisplay.style.boxShadow = `inset 0 0 15px ${cor}40`;
+                
+                document.getElementById("emissao").innerText = `${data.emissao.toFixed(3).replace('.',',')}g CO₂`;
+                document.getElementById("comparativo").innerText = `Mais limpo que ${percentualMap[grade] || 40}% dos sites testados.`;
+
+                const ratingMarker = document.getElementById('ratingMarker');
+                ratingMarker.innerText = grade;
+                ratingMarker.style.borderColor = cor;
+                ratingMarker.style.color = cor;
+                ratingMarker.style.left = markerPositions[grade] || '64.5%';
+                ratingMarker.classList.remove('hidden');
+
+                const visitasAnuais = 10000 * 12;
+                const co2AnualKg = (data.emissao * visitasAnuais) / 1000;
+                const energiaAnualKWh = data.energia * visitasAnuais;
+                document.getElementById("co2Anual").innerText = `${co2AnualKg.toFixed(1)} kg`;
+                document.getElementById("energiaAnual").innerText = `${energiaAnualKWh.toFixed(1)} kWh`;
+
+                document.getElementById("hospedagemVerde").innerText = data.green ? "Sim" : "Não";
+                document.getElementById("pesoPagina").innerText = `${data.pageWeightMB} MB`;
+                document.getElementById("energiaVisita").innerText = `${data.energia.toFixed(5).replace('.',',')} kWh`;
+
+                loadingSection.classList.add("hidden");
+                resultSection.classList.remove("hidden");
+            }, 1000);
+
+        } catch (err) {
+            clearInterval(dicaInterval);
+            clearInterval(progressInterval);
+            alert(`Ocorreu um erro: ${err.message}`);
+            loadingSection.classList.add("hidden");
+            form.classList.remove("hidden");
+        }
+    });
+});
+</script>

@@ -224,14 +224,20 @@ app.post("/calculate", async (req, res) => {
 
     // --- FIM DA LÓGICA DE CÁLCULO ---
 
-    const rating = (() => {
+        const rating = (() => {
+      // ✅ NOVA REGRA: Se a hospedagem NÃO for verde, a nota é 'F' automaticamente.
+      if (!isGreen) {
+        return "F";
+      }
+      
+      // Se a hospedagem for verde, aplicamos a escala de emissão normal.
       if (emissionPerVisit <= 0.040) return "A+";
       if (emissionPerVisit <= 0.079) return "A";
       if (emissionPerVisit <= 0.145) return "B";
       if (emissionPerVisit <= 0.209) return "C";
       if (emissionPerVisit <= 0.278) return "D";
       if (emissionPerVisit <= 0.359) return "E";
-      return "F";
+      return "F"; // A nota ainda pode ser 'F' se a emissão for muito alta, mesmo com hospedagem verde.
     })();
     
     console.log('Cálculos finalizados. Preparando para enviar e-mail...');

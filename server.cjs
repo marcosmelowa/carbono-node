@@ -123,7 +123,7 @@ app.post("/calculate", async (req, res) => {
     const isGreen = greenCheckData.green || false;
     const hostedBy = greenCheckData.hostedby || "Desconhecido";
     const hostedByURL = greenCheckData.hostedbywebsite || "";
-    const greenFactor = isGreen ? 0 : 1.0;
+    const greenFactor = isGreen ? 0.50 : 1.0; // Reduz as emissões do DC em 50% se for verde, em vez de zerar.
 
     let serverIp = "";
     try {

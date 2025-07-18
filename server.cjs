@@ -116,14 +116,27 @@ app.post("/calculate", async (req, res) => {
 
     // --- OBTENÇÃO DE DADOS ---
     console.log(`Verificando Green Web para: ${hostname}`);
-    const greenCheckRes = await fetchWithTimeout(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
-    const greenCheckData = await greenCheckRes.json();
-    console.log('Verificação Green Web concluída.');
+    let isGreen = false;
+    let hostedBy = "Verificação indisponível";
+    let hostedByURL = "";
 
-    const isGreen = greenCheckData.green || false;
-    const hostedBy = greenCheckData.hostedby || "Desconhecido";
-    const hostedByURL = greenCheckData.hostedbywebsite || "";
-    const greenFactor = isGreen ? 0.50 : 1.0; // Reduz as emissões do DC em 50% se for verde, em vez de zerar.
+    // ✅ Inicia um bloco try...catch APENAS para a verificação de hospedagem verde.
+    try {
+        const greenCheckRes = await fetchWithTimeout(`https://api.thegreenwebfoundation.org/greencheck/${hostname}`);
+        const greenCheckData = await greenCheckRes.json();
+        console.log('Verificação Green Web concluída.');
+
+        isGreen = greenCheckData.green || false;
+        hostedBy = greenCheckData.hostedby || "Desconhecido";
+        hostedByURL = greenCheckData.hostedbywebsite || "";
+
+    } catch (e) {
+        // Se a API da Green Web Foundation falhar ou demorar demais, capturamos o erro aqui.
+        console.warn(`AVISO: A verificação de hospedagem verde falhou. Assumindo que o site não é verde. Erro: ${e.message}`);
+        // As variáveis já têm os valores padrão (isGreen = false), então não precisamos fazer mais nada.
+    }
+    
+    const greenFactor = isGreen ? 0.50 : 1.0; // Reduz as emissões do DC em 50% se for verde.
 
     let serverIp = "";
     try {

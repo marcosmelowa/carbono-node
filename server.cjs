@@ -99,7 +99,7 @@ app.use(cors({
 app.use(express.json());
 
 app.post("/calculate", async (req, res) => {
-  const { url, nome, celular, email } = req.body;
+  const { url, nome, celular } = req.body;
 
   let browser;
 
@@ -257,7 +257,6 @@ app.post("/calculate", async (req, res) => {
           <h2>📩 Novo lead - Calculadora de Carbono</h2>
           <p><strong>Nome:</strong> ${nome}</p>
           <p><strong>Celular:</strong> ${celular}</p>
-          <p><strong>Email:</strong> ${email}</p>
           <p><strong>URL:</strong> ${url}</p>
           <hr>
           <p><strong>🌿 Emissão estimada:</strong> ${emissionPerVisit.toFixed(3)} g CO₂/visita (ajustado para cache)</p>

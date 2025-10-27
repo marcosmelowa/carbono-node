@@ -191,7 +191,7 @@ app.post("/calculate", async (req, res) => {
 
     // --- INÍCIO DA LÓGICA DE CÁLCULO SWDM v4 REGIONAL ---
 
-        // 1. Definir a intensidade de carbono global para todos os segmentos
+    // 1. Definir a intensidade de carbono global para todos os segmentos
     const gridIntensityGlobal = getCarbonIntensityByCountryCode('WORLD');
     const gridIntensityServer = gridIntensityGlobal; // Usa a média global
     const gridIntensityUser = gridIntensityGlobal;   // Usa a média global
@@ -232,7 +232,7 @@ app.post("/calculate", async (req, res) => {
     const emUD = pageWeightMB * emEnergyIntensityUD * gridIntensityGlobal;
     const embodiedEmissions = emDC + emN + emUD;
     
-        // 4. Emissão total por visita (considerando 100% de novos visitantes, sem ajuste de cache)
+    // 4. Emissão total por visita (considerando 100% de novos visitantes, sem ajuste de cache)
     const emissionPerVisit = operationalEmissions + embodiedEmissions;
 
     // Estimativa de energia por visita (sem ajuste de cache)
@@ -241,7 +241,7 @@ app.post("/calculate", async (req, res) => {
 
     // --- FIM DA LÓGICA DE CÁLCULO ---
 
-        const rating = (() => {
+    const rating = (() => {
       // ✅ NOVA REGRA: Se a hospedagem NÃO for verde, a nota é 'F' automaticamente.
       if (!isGreen) {
         return "F";
@@ -256,16 +256,8 @@ app.post("/calculate", async (req, res) => {
       if (emissionPerVisit <= 0.359) return "E";
       return "F"; // A nota ainda pode ser 'F' se a emissão for muito alta, mesmo com hospedagem verde.
     })();
-    
-    console.log('Cálculos finalizados. Preparando para enviar e-mail...');
-    try {
-      const transporter = nodemailer.createTransport({
-        host: "smtp.hostinger.com",
-        port: 465,
-        secure: true,
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-      });
-      
+
+    // 🔄 Envio de e-mail via RESEND (HTTPS)
     console.log('Cálculos finalizados. Preparando para enviar e-mail via Resend...');
     try {
       const html = `
@@ -285,7 +277,6 @@ app.post("/calculate", async (req, res) => {
         <p><strong>♻️ Hospedagem verde:</strong> ${isGreen ? "✅ Sim" : "❌ Não"} – ${hostedBy} (${hostedByURL})</p>
       `;
 
-      // Envio via API HTTPS Resend (substitui SMTP)
       await resend.emails.send({
         from: "Web Aplicações <leads@aplicacoes.tec.br>",
         to: ["leads@aplicacoes.tec.br"],

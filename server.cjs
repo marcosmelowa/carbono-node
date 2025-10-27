@@ -9,12 +9,16 @@
 require("dotenv").config();
 const express = require("express");
 const puppeteer = require("puppeteer");
-const { install } = require('@puppeteer/browsers');
-const cors =require("cors");
+const { install } = require("@puppeteer/browsers");
+const cors = require("cors");
 const dns = require("dns").promises;
 const nodemailer = require("nodemailer");
-const path = require('path');
-const { createCanvas, loadImage, registerFont } = require('canvas');
+const path = require("path");
+const { createCanvas, loadImage, registerFont } = require("canvas");
+
+// 🔹 Adição Resend (nova integração via API HTTPS)
+const { Resend } = require("resend");
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 
@@ -262,30 +266,36 @@ app.post("/calculate", async (req, res) => {
         auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
       });
       
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: process.env.EMAIL_USER,
+    console.log('Cálculos finalizados. Preparando para enviar e-mail via Resend...');
+    try {
+      const html = `
+        <h2>📩 Novo lead - Calculadora de Carbono</h2>
+        <p><strong>Nome:</strong> ${nome}</p>
+        <p><strong>Celular:</strong> ${celular}</p>
+        <p><strong>URL:</strong> ${url}</p>
+        <hr>
+        <p><strong>🌿 Emissão estimada:</strong> ${emissionPerVisit.toFixed(3)} g CO₂/visita (ajustado para cache)</p>
+        <p><strong>⚡ Energia estimada:</strong> ${energiaEstimativaKWh.toFixed(5)} kWh</p>
+        <p><strong>📊 Classificação:</strong> ${rating}</p>
+        <hr>
+        <p><strong>💾 Peso da página:</strong> ${pageWeightMB.toFixed(2)} MB</p>
+        <p><strong>🛰️ Localização do servidor:</strong> ${cidadeServidor}, ${paisServidor} (Intensidade: ${gridIntensityServer} g/kWh)</p>
+        <p><strong>👤 Localização do usuário:</strong> ${userCountryCode} (Intensidade: ${gridIntensityUser} g/kWh)</p>
+        <p><strong>🏢 Provedor:</strong> ${orgServidor}</p>
+        <p><strong>♻️ Hospedagem verde:</strong> ${isGreen ? "✅ Sim" : "❌ Não"} – ${hostedBy} (${hostedByURL})</p>
+      `;
+
+      // Envio via API HTTPS Resend (substitui SMTP)
+      await resend.emails.send({
+        from: "Web Aplicações <leads@aplicacoes.tec.br>",
+        to: ["leads@aplicacoes.tec.br"],
         subject: "Novo lead - Calculadora de Carbono",
-        html: `
-          <h2>📩 Novo lead - Calculadora de Carbono</h2>
-          <p><strong>Nome:</strong> ${nome}</p>
-          <p><strong>Celular:</strong> ${celular}</p>
-          <p><strong>URL:</strong> ${url}</p>
-          <hr>
-          <p><strong>🌿 Emissão estimada:</strong> ${emissionPerVisit.toFixed(3)} g CO₂/visita (ajustado para cache)</p>
-          <p><strong>⚡ Energia estimada:</strong> ${energiaEstimativaKWh.toFixed(5)} kWh</p>
-          <p><strong>📊 Classificação:</strong> ${rating}</p>
-          <hr>
-          <p><strong>💾 Peso da página:</strong> ${pageWeightMB.toFixed(2)} MB</p>
-          <p><strong>🛰️ Localização do servidor:</strong> ${cidadeServidor}, ${paisServidor} (Intensidade: ${gridIntensityServer} g/kWh)</p>
-          <p><strong>👤 Localização do usuário:</strong> ${userCountryCode} (Intensidade: ${gridIntensityUser} g/kWh)</p>
-          <p><strong>🏢 Provedor:</strong> ${orgServidor}</p>
-          <p><strong>♻️ Hospedagem verde:</strong> ${isGreen ? "✅ Sim" : "❌ Não"} – ${hostedBy} (${hostedByURL})</p>
-        `
+        html
       });
-      console.log('E-mail enviado com sucesso.');
+
+      console.log('✅ E-mail enviado com sucesso via Resend.');
     } catch (mailErr) {
-      console.error("Erro ao enviar e-mail:", mailErr.message);
+      console.error("❌ Falha ao enviar e-mail via Resend:", mailErr.message);
     }
 
     console.log('Enviando resposta para o cliente...');

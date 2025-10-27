@@ -2,7 +2,7 @@
   "name": "calculadora-carbono",
   "version": "1.0.0",
   "main": "server.cjs",
-    "dependencies": {
+  "dependencies": {
     "@puppeteer/browsers": "^2.1.0",
     "canvas": "^2.11.2",
     "cors": "^2.8.5",
@@ -10,7 +10,8 @@
     "dotenv": "^17.1.0",
     "express": "^5.1.0",
     "nodemailer": "^7.0.5",
-    "puppeteer": "^24.12.1"
+    "puppeteer": "^24.12.1",
+    "resend": "^3.2.0"
   },
   "scripts": {
     "start": "node server.cjs"
